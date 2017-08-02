@@ -261,4 +261,9 @@ public class BuildController {
 		return hypermediaGenerator.getEntityCollectionHypermedia(files, request);
 	}
 
+	@RequestMapping(value = "/{buildId}/cancelBuild", method = RequestMethod.POST)
+	public void cancelBuild(@PathVariable final String releaseCenterKey, @PathVariable final String productKey, @PathVariable final String buildId) {
+		buildService.cancelBuild(releaseCenterKey, productKey, buildId);
+	}
+
 }

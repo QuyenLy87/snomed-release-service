@@ -45,7 +45,6 @@ import org.ihtsdo.buildcloud.entity.helper.EntityHelper;
 import org.ihtsdo.buildcloud.manifest.FileType;
 import org.ihtsdo.buildcloud.manifest.FolderType;
 import org.ihtsdo.buildcloud.manifest.ListingType;
-import org.ihtsdo.buildcloud.service.build.RF2Constants;
 import org.ihtsdo.buildcloud.service.build.Rf2FileExportRunner;
 import org.ihtsdo.buildcloud.service.build.Zipper;
 import org.ihtsdo.buildcloud.service.build.readme.ReadmeGenerator;
@@ -59,6 +58,8 @@ import org.ihtsdo.buildcloud.service.precondition.ManifestFileListingHelper;
 import org.ihtsdo.buildcloud.service.precondition.PreconditionManager;
 import org.ihtsdo.buildcloud.service.rvf.RVFClient;
 import org.ihtsdo.buildcloud.service.security.SecurityHelper;
+import org.ihtsdo.buildcloud.service.tracking.BuildProcess;
+import org.ihtsdo.buildcloud.service.tracking.BuildProcessTracker;
 import org.ihtsdo.otf.rest.exception.BadConfigurationException;
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
 import org.ihtsdo.otf.rest.exception.EntityAlreadyExistsException;
@@ -127,6 +128,9 @@ public class BuildServiceImpl implements BuildService {
 
 	@Autowired
 	private RelationshipHelper relationshipHelper;
+
+	@Autowired
+	private BuildProcessTracker buildProcessTracker;
 
 	@Override
 	public Build createBuildFromProduct(final String releaseCenterKey, final String productKey) throws BusinessServiceException {
@@ -215,6 +219,10 @@ public class BuildServiceImpl implements BuildService {
 	@Override
 	public Build triggerBuild(final String releaseCenterKey, final String productKey, final String buildId, Integer failureExportMax) throws BusinessServiceException {
 		final Build build = getBuildOrThrow(releaseCenterKey, productKey, buildId);
+
+		// Track the build process if it is started
+		BuildProcess buildProcess = new BuildProcess(releaseCenterKey, productKey, buildId, Thread.currentThread().getId());
+		buildProcessTracker.trackBuildProcess(buildProcess);
 		try {
 			dao.loadConfiguration(build);
 		} catch (final IOException e) {
@@ -248,6 +256,8 @@ public class BuildServiceImpl implements BuildService {
 		} finally {
 			// Finish the telemetry stream. Logging on this thread will no longer be captured.
 			TelemetryStream.finish(LOGGER);
+			buildProcessTracker.untrackBuildProcess(buildProcess);
+
 		}
 		return build;
 	}
@@ -680,4 +690,18 @@ public class BuildServiceImpl implements BuildService {
 		return dao.getBuildReportFileStream(build);
 	}
 
+	@Override
+	public void cancelBuild(String releaseCenterKey, String productKey, String buildId) {
+		buildProcessTracker.cancelBuildProcess(releaseCenterKey, productKey, buildId);
+	}
+
+	@Override
+	public List<String> getRunningBuildProcesses() {
+		List<String> buidProcesses = new ArrayList<>();
+		Map<String, BuildProcess> buildProcessMap = buildProcessTracker.getBuildProcesses();
+		for (String s : buildProcessMap.keySet()) {
+			buidProcesses.add(s);
+		}
+		return buidProcesses;
+	}
 }
