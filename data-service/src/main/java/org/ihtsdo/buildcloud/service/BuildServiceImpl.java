@@ -221,7 +221,7 @@ public class BuildServiceImpl implements BuildService {
 		final Build build = getBuildOrThrow(releaseCenterKey, productKey, buildId);
 
 		// Track the build process if it is started
-		BuildProcess buildProcess = new BuildProcess(releaseCenterKey, productKey, buildId, Thread.currentThread().getId());
+		BuildProcess buildProcess = new BuildProcess(build, releaseCenterKey, productKey, buildId, Thread.currentThread().getId());
 		buildProcessTracker.trackBuildProcess(buildProcess);
 		try {
 			dao.loadConfiguration(build);

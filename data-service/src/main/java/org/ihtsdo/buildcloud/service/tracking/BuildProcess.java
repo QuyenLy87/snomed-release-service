@@ -1,18 +1,22 @@
 package org.ihtsdo.buildcloud.service.tracking;
 
+import org.ihtsdo.buildcloud.entity.Build;
+
 public class BuildProcess {
 
     private String releaseCenterKey;
     private String productKey;
     private String buildId;
     private Long threadId;
+    private Build build;
     private BuildProcessStatus status;
 
-    public BuildProcess(String releaseCenterKey, String productKey, String buildId, Long threadId) {
+    public BuildProcess(Build build, String releaseCenterKey, String productKey, String buildId, Long threadId) {
         this.releaseCenterKey = releaseCenterKey;
         this.productKey = productKey;
         this.buildId = buildId;
         this.threadId = threadId;
+        this.build = build;
     }
 
     public String getReleaseCenterKey() {
@@ -61,5 +65,13 @@ public class BuildProcess {
 
     public static String buildKey(String releaseCenterKey, String productKey, String buildId) {
         return releaseCenterKey + "_" + productKey + "_" + buildId;
+    }
+
+    public Build getBuild() {
+        return build;
+    }
+
+    public void setBuild(Build build) {
+        this.build = build;
     }
 }
