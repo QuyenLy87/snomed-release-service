@@ -262,8 +262,18 @@ public class BuildController {
 	}
 
 	@RequestMapping(value = "/{buildId}/cancelBuild", method = RequestMethod.POST)
-	public void cancelBuild(@PathVariable final String releaseCenterKey, @PathVariable final String productKey, @PathVariable final String buildId) {
-		buildService.cancelBuild(releaseCenterKey, productKey, buildId);
+	@ApiOperation(value="Cancel a running build job",
+			notes = "Cancel a running build job." +
+					" Request returns HTTP status of 200 if the process is cancelled, 400 if build process is not found")
+	public void cancelBuild(@PathVariable final String releaseCenterKey, @PathVariable final String productKey, @PathVariable final String buildId,
+							final HttpServletResponse response) {
+		boolean result = buildService.cancelBuild(releaseCenterKey, productKey, buildId);
+		if(result) {
+			response.setStatus(HttpStatus.OK.value());
+		} else {
+			response.setStatus(HttpStatus.BAD_REQUEST.value());
+		}
+
 	}
 
 }

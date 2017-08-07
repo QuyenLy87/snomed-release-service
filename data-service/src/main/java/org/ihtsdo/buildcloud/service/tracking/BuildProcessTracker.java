@@ -41,8 +41,9 @@ public class BuildProcessTracker {
         }
     }
 
-    public void cancelBuildProcess(String releaseCenter, String product, String buildId) {
+    public boolean cancelBuildProcess(String releaseCenter, String product, String buildId) {
         LOGGER.info("Start cancelling build {}", buildId);
+        boolean processKilled = false;
         String key = BuildProcess.buildKey(releaseCenter, product, buildId);
         BuildProcess buildProcess = buildProcesses.get(key);
         if(buildProcess != null && buildProcess.getStatus().equals(BuildProcessStatus.STARTED)) {
@@ -52,6 +53,7 @@ public class BuildProcessTracker {
                 if(thread.getId() == threadId) {
                     thread.interrupt();
                     LOGGER.info("Build {} is cancelled", buildId);
+                    processKilled = true;
                     break;
                 }
             }
@@ -65,6 +67,7 @@ public class BuildProcessTracker {
 
             }
         }
+        return processKilled;
     }
 
     public Map<String, BuildProcess> getBuildProcesses() {

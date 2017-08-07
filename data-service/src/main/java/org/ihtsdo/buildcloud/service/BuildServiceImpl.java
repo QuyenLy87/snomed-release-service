@@ -691,8 +691,8 @@ public class BuildServiceImpl implements BuildService {
 	}
 
 	@Override
-	public void cancelBuild(String releaseCenterKey, String productKey, String buildId) {
-		buildProcessTracker.cancelBuildProcess(releaseCenterKey, productKey, buildId);
+	public boolean cancelBuild(String releaseCenterKey, String productKey, String buildId) {
+		return buildProcessTracker.cancelBuildProcess(releaseCenterKey, productKey, buildId);
 	}
 
 	@Override

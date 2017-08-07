@@ -48,7 +48,7 @@ public interface BuildService {
 
 	InputStream getBuildReportFile(String releaseCenterKey, String productKey,String buildId) throws ResourceNotFoundException;
 
-	void cancelBuild(String releaseCenterKey, String productKey,String buildId);
+	boolean cancelBuild(String releaseCenterKey, String productKey,String buildId);
 
 	List<String> getRunningBuildProcesses();
 
