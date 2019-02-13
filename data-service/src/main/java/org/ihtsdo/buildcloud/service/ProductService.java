@@ -37,6 +37,11 @@ public interface ProductService extends EntityService<Product> {
 	String RELEASE_AS_AN_EDITION = "releaseExtensionAsAnEdition";
 	String USE_EXTERNAL_CLASSIFIER = "useExternalClassifier";
 	String ENABLE_DROOLS = "enableDrools";
+	String ENABLE_JIRA = "jiraIssueCreationFlag";
+	String ENABLE_MRCM = "enableMRCMValidation";
+	String JIRA_PRODUCT_NAME = "jiraProductName";
+	String JIRA_REPORTING_STAGE = "jiraReportingStage";
+String INCLUDED_PREV_RELEASE_FILES = "includePrevReleaseFiles";
 	
 	List<Product> findAll(String releaseCenterKey, Set<FilterOption> filterOptions) throws AuthenticationException;
 

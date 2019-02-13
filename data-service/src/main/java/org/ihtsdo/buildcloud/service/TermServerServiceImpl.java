@@ -1,5 +1,7 @@
 package org.ihtsdo.buildcloud.service;
 
+import com.google.common.io.Files;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.ihtsdo.otf.constants.Concepts;
 import org.ihtsdo.otf.rest.client.RestClientException;
@@ -9,27 +11,31 @@ import org.ihtsdo.otf.rest.client.snowowl.pojo.Branch;
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
 import org.ihtsdo.otf.rest.exception.ProcessWorkflowException;
 import org.ihtsdo.otf.utils.DateUtils;
+import org.ihtsdo.otf.utils.ZipFileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.Assert;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 
 @Service
 public class TermServerServiceImpl implements TermServerService{
-
-    @Value("${snowowl.flatIndexExportStyle}")
-    private Boolean exportFlatType;
 
     @Value("${snowowl.reasonerId}")
     private String reasonerId;
@@ -39,41 +45,84 @@ public class TermServerServiceImpl implements TermServerService{
 
     private static final Logger logger = LoggerFactory.getLogger(TermServerService.class);
 
+    private static final String DELTA = "Delta";
+    private static final String SNAPSHOT = "Snapshot";
 
-   /* public File export(String snowowlUrl, String branchPath, String startEffectiveDate, String endEffectiveDate, String effectiveDate, Set<String> excludedModuleIds, SnowOwlRestClient.ExportCategory exportCategory,
-                       SnowOwlRestClient.ExportType exportType, String namespaceId, Boolean includeUnpublished, String codeSystemShortName) throws BusinessServiceException, FileNotFoundException {
-        String snowOwlUrl = snowowlUrl + snowowlPath;
-        SnowOwlRestClientFactory clientFactory = new SnowOwlRestClientFactory(snowOwlUrl, reasonerId);
-        SnowOwlRestClient snowOwlRestClient =  clientFactory.getClient();
-        snowOwlRestClient.setFlatIndexExportStyle(exportFlatType != null ? exportFlatType : true);
-        ExportConfigurationExtensionBuilder configurationBuilder = new ExportConfigurationExtensionBuilder();
-        configurationBuilder.setStartEffectiveTime(StringUtils.isNotBlank(startEffectiveDate) ? startEffectiveDate : effectiveDate);
-        configurationBuilder.setEndEffectiveTime(StringUtils.isNotBlank(endEffectiveDate) ? endEffectiveDate : endEffectiveDate);
-        configurationBuilder.setTransientEffectiveTime(effectiveDate);
-        configurationBuilder.setBranchPath(branchPath);
-        configurationBuilder.setType(exportType);
-        configurationBuilder.setNamespaceId(namespaceId);
-        configurationBuilder.setIncludeUnpublished(includeUnpublished != null ? includeUnpublished : false);
-        if(StringUtils.isNotBlank(codeSystemShortName)) configurationBuilder.setCodeSystemShortName(codeSystemShortName);
-        if(excludedModuleIds != null) {
-            configurationBuilder.addModuleIds(excludedModuleIds);
-        }
-        return snowOwlRestClient.export(configurationBuilder);
-    }*/
-    
 
     @Override
-    public File export(String termServerUrl, String branchPath, String effectiveDate, Set<String> excludedModuleId, SnowOwlRestClient.ExportCategory exportCategory) throws BusinessServiceException {
+    public File export(String termServerUrl, String branchPath, String effectiveDate, Set<String> excludedModuleId, SnowOwlRestClient.ExportCategory exportCategory) throws BusinessServiceException, IOException, ProcessWorkflowException {
         String snowOwlUrl = termServerUrl + snowowlPath;
         SnowOwlRestClientFactory clientFactory = new SnowOwlRestClientFactory(snowOwlUrl, reasonerId);
         SnowOwlRestClient snowOwlRestClient = clientFactory.getClient();
-        SnowOwlRestClient.ExportType exportType = exportFlatType ? SnowOwlRestClient.ExportType.SNAPSHOT : SnowOwlRestClient.ExportType.DELTA;
+        SnowOwlRestClient.ExportType exportType = SnowOwlRestClient.ExportType.DELTA;
         Set<String> moduleList = buildModulesList(snowOwlRestClient, branchPath, excludedModuleId);
         ExportConfigurationExtensionBuilder configurationExtensionBuilder = buildExportConfiguration(branchPath,effectiveDate,moduleList,
                 exportCategory, exportType,snowOwlRestClient);
-        return snowOwlRestClient.export(configurationExtensionBuilder);
+        File export = snowOwlRestClient.export(configurationExtensionBuilder);
+        try {
+            ZipFile zipFile = new ZipFile(export);
+            File extractDir = Files.createTempDir();
+            unzipFlat(export, extractDir);
+            renameFiles(extractDir, SNAPSHOT, DELTA);
+            File tempDir = Files.createTempDir();
+            File newZipFile = new File(tempDir,"term-server.zip");
+            ZipFileUtils.zip(extractDir.getAbsolutePath(), newZipFile.getAbsolutePath());
+            return newZipFile;
+        } catch (IOException e) {
+            String returnedError = org.apache.commons.io.FileUtils.readFileToString(export);
+            logger.error("Failed export data from term server. Term server returned error: {}", returnedError);
+            throw new BusinessServiceException("Failed export data from term server. Term server returned error:" + returnedError);
+        }
 
     }
+
+
+    public void unzipFlat(File archive, File targetDir) throws ProcessWorkflowException, IOException {
+
+        if (!targetDir.exists() || !targetDir.isDirectory()) {
+            throw new ProcessWorkflowException(targetDir + " is not a viable directory in which to extract archive");
+        }
+
+        ZipInputStream zis = new ZipInputStream(new FileInputStream(archive));
+        ZipEntry ze = zis.getNextEntry();
+        try {
+            while (ze != null) {
+                if (!ze.isDirectory()) {
+                    Path p = Paths.get(ze.getName());
+                    String extractedFileName = p.getFileName().toString();
+                    File extractedFile = new File(targetDir, extractedFileName);
+                    OutputStream out = new FileOutputStream(extractedFile);
+                    IOUtils.copy(zis, out);
+                    IOUtils.closeQuietly(out);
+                }
+                ze = zis.getNextEntry();
+            }
+        } finally {
+            zis.closeEntry();
+            zis.close();
+        }
+    }
+
+    private void renameFiles(File targetDirectory, String find, String replace) {
+        Assert.isTrue(targetDirectory.isDirectory(), targetDirectory.getAbsolutePath()
+                + " must be a directory in order to rename files from " + find + " to " + replace);
+        for (File thisFile : targetDirectory.listFiles()) {
+            renameFile(targetDirectory, thisFile, find, replace);
+        }
+    }
+
+    private void renameFile(File parentDir, File thisFile, String find, String replace) {
+        if (thisFile.exists() && !thisFile.isDirectory()) {
+            String currentName = thisFile.getName();
+            String newName = currentName.replace(find, replace);
+            if (!newName.equals(currentName)) {
+                File newFile = new File(parentDir, newName);
+                thisFile.renameTo(newFile);
+            }
+        }
+    }
+
+
 
     private ExportConfigurationExtensionBuilder buildExportConfiguration(String branchPath, String effectiveDate, Set<String> moduleList, SnowOwlRestClient.ExportCategory exportCategory,
                                                                          SnowOwlRestClient.ExportType exportType, SnowOwlRestClient snowOwlRestClient) throws BusinessServiceException {
@@ -102,6 +151,7 @@ public class TermServerServiceImpl implements TermServerService{
             case UNPUBLISHED:
                 String tet = (effectiveDate == null) ? DateUtils.now(DateUtils.YYYYMMDD) : effectiveDate;
                 exportConfig.setTransientEffectiveTime(tet);
+                exportConfig.setType(SnowOwlRestClient.ExportType.DELTA);
                 break;
             case PUBLISHED:
                 if(effectiveDate == null) {
@@ -109,7 +159,7 @@ public class TermServerServiceImpl implements TermServerService{
                 }
                 exportConfig.setStartEffectiveTime(effectiveDate);
                 exportConfig.setTransientEffectiveTime(effectiveDate);
-                exportConfig.setEndEffectiveTime(effectiveDate);
+                exportConfig.setType(SnowOwlRestClient.ExportType.SNAPSHOT);
                 break;
             case FEEDBACK_FIX:
                 if(effectiveDate == null) {
@@ -118,6 +168,7 @@ public class TermServerServiceImpl implements TermServerService{
                 exportConfig.setStartEffectiveTime(effectiveDate);
                 exportConfig.setIncludeUnpublished(true);
                 exportConfig.setTransientEffectiveTime(effectiveDate);
+                exportConfig.setType(SnowOwlRestClient.ExportType.SNAPSHOT);
                 break;
                 default:
                     logger.error("Export category {} not recognized", exportCategory);

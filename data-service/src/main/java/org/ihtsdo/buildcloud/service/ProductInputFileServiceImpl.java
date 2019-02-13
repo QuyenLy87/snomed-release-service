@@ -41,6 +41,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -64,6 +66,10 @@ public class ProductInputFileServiceImpl implements ProductInputFileService {
 	private final FileHelper fileHelper;
 
 	private final FileHelper externallyMaintainedFileHelper;
+
+	private static final String SRC_TERM_SERVER = "terminology-server";
+
+	private static final String SRC_EXT_MAINTAINED = "externally-maintained";
 
 	@Autowired
 	private ProductDAO productDAO;
@@ -350,18 +356,16 @@ public class ProductInputFileServiceImpl implements ProductInputFileService {
 	}
 
 	private void gatherSourceFilesFromTermServer(String centerKey, String productKey, GatherInputRequestPojo requestConfig
-			, InputGatherReport inputGatherReport) throws BusinessServiceException, IOException {
+			, InputGatherReport inputGatherReport) throws BusinessServiceException, IOException, ProcessWorkflowException {
 		try {
-			/*File exportFile = termServerService.export(null, requestConfig.getBranchPath(), requestConfig.getStartEffectiveDate(), requestConfig.getEndEffectiveDate(),
-					requestConfig.getEffectiveDate(), requestConfig.getExcludedModuleIds(), requestConfig.getExportCategory(),
-					SnowOwlRestClient.ExportType.DELTA, requestConfig.getNamespaceId(), requestConfig.isIncludeUnpublished(), requestConfig.getCodeSystemShortName());*/
 			File exportFile = termServerService.export(requestConfig.getTermServerUrl(), requestConfig.getBranchPath(), requestConfig.getEffectiveDate(), requestConfig.getExcludedModuleIds(), requestConfig.getExportCategory());
 			try {
 				//Test whether the exported file is really a zip file
 				ZipFile zipFile = new ZipFile(exportFile);
 				FileInputStream fileInputStream = new FileInputStream(exportFile);
-				putSourceFile("terminology-server", centerKey, productKey, fileInputStream, exportFile.getName(),exportFile.length());
-				inputGatherReport.addDetails(InputGatherReport.Status.COMPLETED, "terminology-server",
+
+				putSourceFile(SRC_TERM_SERVER, centerKey, productKey, fileInputStream, exportFile.getName(),exportFile.length());
+				inputGatherReport.addDetails(InputGatherReport.Status.COMPLETED, SRC_TERM_SERVER,
 						"Successfully export file " + exportFile.getName() + " from term server and upload to source \"terminology-server\"");
 				LOGGER.info("Successfully export file {} from term server and upload to source \"terminology-server\"", exportFile.getName());
 			} catch (ZipException ex) {
@@ -370,10 +374,11 @@ public class ProductInputFileServiceImpl implements ProductInputFileService {
 				throw new BusinessServiceException("Failed export data from term server. Term server returned error:" + returnedError);
 			}
 		} catch (Exception ex) {
-			inputGatherReport.addDetails(InputGatherReport.Status.ERROR, "terminology-server", ex.getMessage());
+			inputGatherReport.addDetails(InputGatherReport.Status.ERROR, SRC_TERM_SERVER, ex.getMessage());
 			throw ex;
 		}
 	}
+
 
 	public void gatherSourceFilesFromExternallyMaintainedBucket(String centerKey, String productKey, String effectiveDate
 			, InputGatherReport inputGatherReport) throws IOException {
@@ -386,12 +391,12 @@ public class ProductInputFileServiceImpl implements ProductInputFileService {
 				continue;
 			try {
 				Product product = getProduct(centerKey, productKey);
-				String sourceFilesPath = s3PathHelper.getProductSourceSubDirectoryPath(product, "externally-maintained").toString();
+				String sourceFilesPath = s3PathHelper.getProductSourceSubDirectoryPath(product, SRC_EXT_MAINTAINED).toString();
 				externallyMaintainedFileHelper.copyFile(dirPath + externalFile, buildBucketName, sourceFilesPath + FilenameUtils.getName(externalFile));
 				LOGGER.info("Successfully export file " + externalFile + " from Externally Maintained bucket and uploaded to source \"externally-maintained\"");
 			} catch (Exception ex) {
 				LOGGER.error("Failed to pull external file from S3: {}/{}/{}", centerKey, effectiveDate, externalFile, ex);
-				inputGatherReport.addDetails(InputGatherReport.Status.ERROR, "externally-maintained", ex.getMessage());
+				inputGatherReport.addDetails(InputGatherReport.Status.ERROR, SRC_EXT_MAINTAINED, ex.getMessage());
 				throw ex;
 			}
 		}
@@ -408,5 +413,11 @@ public class ProductInputFileServiceImpl implements ProductInputFileService {
 	public InputStream getSourceFileStream(String releaseCenterKey, String productKey, String source, String sourceFileName) {
 		Product product = getProduct(releaseCenterKey, productKey);
 		return fileHelper.getFileStream(s3PathHelper.getProductSourcesPath(product) + source + BuildS3PathHelper.SEPARATOR + sourceFileName);
+	}
+
+	@Override
+	public InputStream getFullBuildLogFromProductIfExists(String releaseCenterKey, String productKey) {
+		Product product = getProduct(releaseCenterKey, productKey);
+		return fileHelper.getFileStream(s3PathHelper.getBuildFullLogJsonFromProduct(product));
 	}
 }

@@ -71,6 +71,7 @@ public class InputSourceFileProcessor {
     private static final String OUT_DIR = "out";
     private static final int DESCRIPTION_TYPE_COL = 6;
     private static final String TEXT_DEFINITION_TYPE_ID = "900000000000550004";
+    private static final String TXT_EXTENSION = ".txt";
 
     private InputStream manifestStream;
     private FileHelper fileHelper;
@@ -361,17 +362,8 @@ public class InputSourceFileProcessor {
                     String header = lines.get(0);
                	 	//remove header before processing
                     lines.remove(0);
-                    if (header.startsWith(HEADER_REFSETS)) {
+                    if (header.startsWith(HEADER_REFSETS) && fileName.endsWith(TXT_EXTENSION)) {
                         processRefsetFiles(fileProcessingReportDetails,lines, source, fileName, outDir, header);
-
-                        //Handle in case this refset file is only meant for copying
-                        String baseFileName = FilenameUtils.getName(fileName);
-                        baseFileName = (baseFileName.startsWith(RF2Constants.BETA_RELEASE_PREFIX)) ? baseFileName.replaceFirst(RF2Constants.BETA_RELEASE_PREFIX, "") : baseFileName;
-                        if(filesToCopyFromSource.containsKey(baseFileName)
-                                && (filesToCopyFromSource.get(baseFileName).contains(source)
-                                || filesToCopyFromSource.get(baseFileName).isEmpty())) {
-                            addFileToSkippedList(source, fileName);
-                        }
                     } else if (header.startsWith(HEADER_TERM_DESCRIPTION)) {
                     	//create delta file with header
                     	writeHeaderToFile(outDir,header, descriptionFileProcessingConfigs.values());
@@ -379,15 +371,6 @@ public class InputSourceFileProcessor {
                         	writeHeaderToFile(outDir,header, textDefinitionFileProcessingConfigs.values());
                         } 
                         processDescriptionsAndTextDefinitions(lines, source, fileName, outDir, header);
-
-                        //Handle in case this description file is only meant for copying
-                        String baseFileName = FilenameUtils.getName(fileName);
-                        baseFileName = (baseFileName.startsWith(RF2Constants.BETA_RELEASE_PREFIX)) ? baseFileName.replaceFirst(RF2Constants.BETA_RELEASE_PREFIX, "") : baseFileName;
-                        if(filesToCopyFromSource.containsKey(baseFileName)
-                                && (filesToCopyFromSource.get(baseFileName).contains(source)
-                                || filesToCopyFromSource.get(baseFileName).isEmpty())) {
-                            addFileToSkippedList(source, fileName);
-                        }
                     } else {
                     	addFileToSkippedList(source, fileName);
                     }
@@ -631,10 +614,7 @@ public class InputSourceFileProcessor {
         	//remove header line and append
         	List<String> lines = FileUtils.readLines(sourceFile, CharEncoding.UTF_8);
         	if (!lines.isEmpty() && lines.size() > 0) {
-        	    //Check whether the destination file is empty, if is not empty, remove header line
-                if(destinationFile.length() > 0) {
-                    lines.remove(0);
-                }
+        		lines.remove(0);
             	FileUtils.writeLines(destinationFile, CharEncoding.UTF_8, lines, RF2Constants.LINE_ENDING, true);
             	logger.debug("Appending " + sourceFile.getName() + " to " + destinationFile.getAbsolutePath());
         	}

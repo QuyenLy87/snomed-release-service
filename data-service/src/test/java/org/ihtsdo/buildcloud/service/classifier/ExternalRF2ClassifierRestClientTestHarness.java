@@ -1,10 +1,11 @@
 package org.ihtsdo.buildcloud.service.classifier;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
+import java.util.Arrays;
 
-import org.ihtsdo.buildcloud.service.classifier.ExternalRF2ClassifierRestClient;
 import org.ihtsdo.otf.rest.exception.BusinessServiceException;
 import org.junit.Before;
 import org.junit.Test;
@@ -27,9 +28,21 @@ public class ExternalRF2ClassifierRestClientTestHarness {
 	public void testClassification() throws Exception {
 		assertTrue(client.getTimeoutInSeconds() > 0);
 		//Put RF2Delta.zip in folder release under project data-service
-		File rf2DeltaZipFile = new File("release/RF2Delta.zip");
+		File rf2DeltaZipFile = new File("release/RF2DeltaWithAxiom.zip");
 		assertTrue(rf2DeltaZipFile.exists());
-		File result = client.classify(rf2DeltaZipFile, "SnomedCT_InternationalRF2_PRODUCTION_20170731T150000Z.zip");
+		File result = client.classify(rf2DeltaZipFile, Arrays.asList("SnomedCT_InternationalRF2_PRODUCTION_20180731T120000Z_OWLExpression.zip"));
+		assertNotNull(result);
+		System.out.println("Classification result is saved at:" + result.getAbsolutePath().toString());
+	}
+	
+	
+	@Test
+	public void testEmptyDelta() throws Exception {
+		assertTrue(client.getTimeoutInSeconds() > 0);
+		//Put RF2Delta.zip in folder release under project data-service
+		File rf2DeltaZipFile = new File("release/Empty_RF2Delta.zip");
+		assertTrue(rf2DeltaZipFile.exists());
+		File result = client.classify(rf2DeltaZipFile, Arrays.asList("xSnomedCT_InternationalRF2_ALPHA_20180731T120000Z.zip", "SnomedCT_InternationalRF2_PRODUCTION_20180131T120000Z.zip"));
 		assertNotNull(result);
 		System.out.println("Classification result is saved at:" + result.getAbsolutePath().toString());
 	}

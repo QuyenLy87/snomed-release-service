@@ -12,8 +12,10 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.security.NoSuchAlgorithmException;
+import java.text.DateFormat;
 import java.text.Normalizer;
 import java.text.Normalizer.Form;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -38,6 +40,7 @@ import org.ihtsdo.buildcloud.entity.Build;
 import org.ihtsdo.buildcloud.entity.Build.Status;
 import org.ihtsdo.buildcloud.entity.BuildConfiguration;
 import org.ihtsdo.buildcloud.entity.BuildReport;
+import org.ihtsdo.buildcloud.entity.ExtensionConfig;
 import org.ihtsdo.buildcloud.entity.PreConditionCheckReport;
 import org.ihtsdo.buildcloud.entity.PreConditionCheckReport.State;
 import org.ihtsdo.buildcloud.entity.Product;
@@ -277,6 +280,7 @@ public class BuildServiceImpl implements BuildService {
 					dao.persistReport(build);
 					dao.updateStatus(build, Status.CANCELLED);
 					dao.deleteOutputFiles(build);
+					LOGGER.info("Build has been canceled");
 				}
 			}
 
@@ -422,6 +426,7 @@ public class BuildServiceImpl implements BuildService {
 			if (configuration.isCreateInferredRelationships()) {
 				// Run classifier
 				ClassificationResult result = rf2ClassifierService.classify(build, inputFileSchemaMap);
+				if(dao.isBuildCancelRequested(build)) return;
 				generator.generateRelationshipFiles(result);
 			} else {
 				LOGGER.info("Skipping inferred relationship creation due to product configuration.");
@@ -588,8 +593,18 @@ public class BuildServiceImpl implements BuildService {
 						+ "/" + build.getId();
 				qaTestConfig.setStorageLocation(storageLocation);
 			}
-			validateQaTestConfig(qaTestConfig, build.getConfiguration());
-			return rvfClient.validateOutputPackageFromS3(s3ZipFilePath, qaTestConfig, manifestFileS3Path, failureExportMax);
+			BuildConfiguration buildConfiguration = build.getConfiguration();
+			validateQaTestConfig(qaTestConfig, buildConfiguration);
+			String effectiveTime = buildConfiguration.getEffectiveTimeFormatted();
+			boolean releaseAsAnEdition = false;
+			String includedModuleId = null;
+			ExtensionConfig extensionConfig = buildConfiguration.getExtensionConfig();
+			if(extensionConfig != null) {
+				releaseAsAnEdition = extensionConfig.isReleaseAsAnEdition();
+				includedModuleId = extensionConfig.getModuleId();
+
+			}
+			return rvfClient.validateOutputPackageFromS3(s3ZipFilePath, qaTestConfig, manifestFileS3Path, failureExportMax, effectiveTime, releaseAsAnEdition, includedModuleId);
 		}
 	}
 
@@ -739,6 +754,7 @@ public class BuildServiceImpl implements BuildService {
 		//Only cancel build if the status is "BUILDING"
 		dao.assertStatus(build, Status.BUILDING);
 		dao.updateStatus(build, Status.CANCEL_REQUESTED);
+		LOGGER.warn("Status of build {} has been updated to {}", build, Status.CANCEL_REQUESTED.name());
 	}
 
 	@Override
